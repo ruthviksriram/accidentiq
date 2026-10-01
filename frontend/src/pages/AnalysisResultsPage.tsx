@@ -323,14 +323,14 @@ export const AnalysisResultsPage: React.FC = () => {
         </div>
       )}
 
-      {analysisResult && (
+      {analysisResult ? (
         <GeminiAnalysisDisplay analysis={analysisResult} />
-      )}
-
-      {/* ==============================================================
-          1. INVESTIGATION OVERVIEW
-          ============================================================== */}
-      <section
+      ) : (
+        <>
+          {/* ==============================================================
+              1. INVESTIGATION OVERVIEW
+              ============================================================== */}
+          <section
         style={{
           backgroundColor: 'var(--bg-surface)',
           border: '1px solid var(--border-subtle)',
@@ -939,6 +939,8 @@ export const AnalysisResultsPage: React.FC = () => {
           ))}
         </ul>
       </section>
+      </>
+      )}
 
       {/* Evidence Lightbox Modal */}
       {selectedEvidenceModal && (

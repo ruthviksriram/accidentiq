@@ -36,13 +36,51 @@ interface GeminiSceneReconstruction {
   limitations: string;
 }
 
+interface GeminiParticipant {
+  label: string;
+  type?: string;
+  evidence?: string;
+  damage?: string;
+}
+
+interface GeminiVisibleDamage {
+  participantLabel: string;
+  component: string;
+  severity: "Severe" | "Moderate" | "Minor";
+  description: string;
+}
+
+interface GeminiSceneObservation {
+  observation: string;
+  classification: "OBSERVED" | "REPORTED" | "INFERRED" | "UNKNOWN";
+}
+
+interface GeminiParticipantAction {
+  participantLabel: string;
+  action: string;
+  possibleContributingFactors: string[];
+  classification: "OBSERVED" | "REPORTED" | "INFERRED";
+}
+
+interface GeminiEvidenceClassification {
+  observedCount?: number;
+  reportedCount?: number;
+  inferredCount?: number;
+  unknownCount?: number;
+}
+
 interface GeminiAnalysisOutput {
   summary: string;
+  participants: GeminiParticipant[];
+  visible_damage: GeminiVisibleDamage[];
+  scene_observations: GeminiSceneObservation[];
+  possible_sequence_of_events: string[];
+  participant_actions: GeminiParticipantAction[];
   observed_evidence: GeminiObservedEvidence[];
   reported_information: string[];
-  possible_sequence_of_events: string[];
   possible_contributing_factors: string[];
   evidence_limitations: string[];
+  evidence_classification?: GeminiEvidenceClassification;
   possible_scene_reconstruction: GeminiSceneReconstruction;
 }
 
@@ -418,6 +456,47 @@ REQUIRED JSON OUTPUT FORMAT:
 You MUST respond with a single, valid JSON object with this exact shape:
 {
   "summary": "short evidence-based summary",
+  "participants": [
+    {
+      "label": "Vehicle A (Sedan)",
+      "type": "vehicle",
+      "evidence": "Resting in northbound travel lane with severe front-end impact crush",
+      "damage": "Front bumper sheared, hood folded upward, driver airbag deployment visible"
+    }
+  ],
+  "visible_damage": [
+    {
+      "participantLabel": "Vehicle A",
+      "component": "Front Bumper & Fascia",
+      "severity": "Severe",
+      "description": "Crush deformation with inward structural displacement consistent with primary impact"
+    }
+  ],
+  "scene_observations": [
+    {
+      "observation": "Glass and bumper debris scatter concentrated in center intersection quadrant",
+      "classification": "OBSERVED"
+    },
+    {
+      "observation": "Wet asphalt roadway conditions noted in incident report",
+      "classification": "REPORTED"
+    }
+  ],
+  "possible_sequence_of_events": [
+    "Vehicle A and Vehicle B approached the intersection along perpendicular paths",
+    "Primary impact occurred near the intersection center as indicated by debris concentration"
+  ],
+  "participant_actions": [
+    {
+      "participantLabel": "Vehicle A",
+      "action": "Proceeding northbound through intersection",
+      "possibleContributingFactors": [
+        "Sightline obstruction from roadside structures",
+        "Wet pavement surface reducing available braking friction"
+      ],
+      "classification": "INFERRED"
+    }
+  ],
   "observed_evidence": [
     {
       "text": "description of directly visible evidence item (e.g. front-quarter crush deformation, tire scrub, final rest)",
@@ -426,9 +505,6 @@ You MUST respond with a single, valid JSON object with this exact shape:
   ],
   "reported_information": [
     "facts or claims documented in the case narrative or initial officer log"
-  ],
-  "possible_sequence_of_events": [
-    "step-by-step possible chronological sequence based on visible damage and roadway geometry"
   ],
   "possible_contributing_factors": [
     "possible environmental, mechanical, or kinematic factors consistent with evidence"
@@ -481,6 +557,35 @@ Generate the structured analysis JSON adhering strictly to the safety guidelines
       imagePayloads
     );
 
+    // Ensure all required fields exist and are normalized
+    if (!Array.isArray(analysisOutput.participants)) {
+      analysisOutput.participants = [];
+    }
+    if (!Array.isArray(analysisOutput.visible_damage)) {
+      analysisOutput.visible_damage = [];
+    }
+    if (!Array.isArray(analysisOutput.scene_observations)) {
+      analysisOutput.scene_observations = [];
+    }
+    if (!Array.isArray(analysisOutput.possible_sequence_of_events)) {
+      analysisOutput.possible_sequence_of_events = [];
+    }
+    if (!Array.isArray(analysisOutput.participant_actions)) {
+      analysisOutput.participant_actions = [];
+    }
+    if (!Array.isArray(analysisOutput.observed_evidence)) {
+      analysisOutput.observed_evidence = [];
+    }
+    if (!Array.isArray(analysisOutput.reported_information)) {
+      analysisOutput.reported_information = [];
+    }
+    if (!Array.isArray(analysisOutput.possible_contributing_factors)) {
+      analysisOutput.possible_contributing_factors = [];
+    }
+    if (!Array.isArray(analysisOutput.evidence_limitations)) {
+      analysisOutput.evidence_limitations = [];
+    }
+
     // Ensure possible_scene_reconstruction conforms to required structure
     if (!analysisOutput.possible_scene_reconstruction) {
       analysisOutput.possible_scene_reconstruction = {
@@ -513,6 +618,52 @@ Generate the structured analysis JSON adhering strictly to the safety guidelines
       if (!recon.limitations) {
         recon.limitations = "Evidence-based visualization — not a definitive forensic or legal reconstruction. Speeds, trajectories, and positions cannot be definitively established from the supplied evidence.";
       }
+    }
+
+    // If participants empty, derive from reconstruction elements
+    if (analysisOutput.participants.length === 0 && analysisOutput.possible_scene_reconstruction?.elements?.length > 0) {
+      analysisOutput.participants = analysisOutput.possible_scene_reconstruction.elements.map((el) => ({
+        label: el.label,
+        type: el.label.toLowerCase().includes("pedestrian") ? "pedestrian" : "vehicle",
+        evidence: `Observed at: ${el.position}`,
+        damage: el.description
+      }));
+    }
+
+    // If visible damage empty, extract from observed evidence mentioning damage
+    if (analysisOutput.visible_damage.length === 0 && analysisOutput.observed_evidence.length > 0) {
+      analysisOutput.visible_damage = analysisOutput.observed_evidence
+        .filter((ev) => /damage|crush|deformation|impact|broken|shattered|dented/i.test(ev.text))
+        .map((ev, idx) => ({
+          participantLabel: `Participant ${idx + 1}`,
+          component: "Impact Contact Zone",
+          severity: "Moderate" as const,
+          description: ev.text
+        }));
+    }
+
+    // If scene observations empty, populate from observed_evidence and reported_information
+    if (analysisOutput.scene_observations.length === 0) {
+      analysisOutput.scene_observations = [
+        ...analysisOutput.observed_evidence.map((ev) => ({
+          observation: ev.text,
+          classification: "OBSERVED" as const
+        })),
+        ...analysisOutput.reported_information.map((rep) => ({
+          observation: rep,
+          classification: "REPORTED" as const
+        }))
+      ];
+    }
+
+    // If participant actions empty, populate from contributing factors
+    if (analysisOutput.participant_actions.length === 0 && analysisOutput.possible_contributing_factors.length > 0) {
+      analysisOutput.participant_actions = [{
+        participantLabel: analysisOutput.participants[0]?.label || "Involved Parties",
+        action: "Traversing incident sector",
+        possibleContributingFactors: analysisOutput.possible_contributing_factors,
+        classification: "INFERRED" as const
+      }];
     }
 
     // If case has non-image files, make sure evidence limitations notes it

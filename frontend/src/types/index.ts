@@ -200,13 +200,52 @@ export interface GeminiSceneReconstruction {
   participants?: GeminiReconstructionParticipant[];
 }
 
+export interface GeminiParticipant {
+  id?: string;
+  label: string;
+  type?: string;
+  evidence?: string;
+  damage?: string;
+}
+
+export interface GeminiVisibleDamage {
+  participantLabel: string;
+  component: string;
+  severity: 'Severe' | 'Moderate' | 'Minor';
+  description: string;
+}
+
+export interface GeminiSceneObservation {
+  observation: string;
+  classification: 'OBSERVED' | 'REPORTED' | 'INFERRED' | 'UNKNOWN';
+}
+
+export interface GeminiParticipantAction {
+  participantLabel: string;
+  action: string;
+  possibleContributingFactors: string[];
+  classification: 'OBSERVED' | 'REPORTED' | 'INFERRED';
+}
+
+export interface GeminiEvidenceClassification {
+  observedCount?: number;
+  reportedCount?: number;
+  inferredCount?: number;
+  unknownCount?: number;
+}
+
 export interface GeminiAnalysisOutput {
   summary: string;
-  observed_evidence: GeminiObservedEvidence[];
-  reported_information: string[];
+  participants?: GeminiParticipant[];
+  visible_damage?: GeminiVisibleDamage[];
+  scene_observations?: GeminiSceneObservation[];
   possible_sequence_of_events: string[];
-  possible_contributing_factors: string[];
-  evidence_limitations: string[];
+  participant_actions?: GeminiParticipantAction[];
+  observed_evidence?: GeminiObservedEvidence[];
+  reported_information?: string[];
+  possible_contributing_factors?: string[];
+  evidence_limitations?: string[];
+  evidence_classification?: GeminiEvidenceClassification;
   possible_scene_reconstruction: GeminiSceneReconstruction;
 }
 

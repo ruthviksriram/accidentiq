@@ -1,5 +1,13 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { AccidentCase, AccidentType, EvidenceFile } from '../types';
+import {
+  AccidentCase,
+  AccidentType,
+  EvidenceFile,
+  Participant,
+  EvidenceClassification,
+  EventSequenceStep,
+  ParticipantActionAnalysis
+} from '../types';
 import { supabase } from '../lib/supabase';
 
 interface CaseContextType {
@@ -82,6 +90,123 @@ export function mapRowToCase(
       })
     : [];
 
+  // Map participants from latestAnalysis if available
+  const mappedParticipants: Participant[] = [];
+  if (latestAnalysis?.participants && Array.isArray(latestAnalysis.participants) && latestAnalysis.participants.length > 0) {
+    latestAnalysis.participants.forEach((p: any, idx: number) => {
+      const pDamage = (latestAnalysis.visible_damage || [])
+        .filter((d: any) =>
+          (d.participantLabel && p.label && (d.participantLabel.toLowerCase().includes(p.label.toLowerCase()) || p.label.toLowerCase().includes(d.participantLabel.toLowerCase())))
+        )
+        .map((d: any) => ({
+          component: d.component || 'Observed Damage',
+          severity: (d.severity as 'Minor' | 'Moderate' | 'Severe') || 'Moderate',
+          description: d.description || '',
+          evidenceRefIds: []
+        }));
+
+      if (pDamage.length === 0 && p.damage) {
+        pDamage.push({
+          component: 'Observed Impact Damage',
+          severity: 'Moderate',
+          description: p.damage,
+          evidenceRefIds: []
+        });
+      }
+
+      const isPedestrian = p.type === 'pedestrian' || (p.label && p.label.toLowerCase().includes('pedestrian'));
+      mappedParticipants.push({
+        id: p.id || `p-${idx + 1}`,
+        type: isPedestrian ? 'pedestrian' : 'vehicle',
+        label: p.label || `Participant ${idx + 1}`,
+        role: isPedestrian ? 'pedestrian' : 'driver',
+        vehicleDetails: !isPedestrian ? {
+          vehicleType: p.label || 'Vehicle',
+          makeModel: p.label || 'Unknown Model',
+          driverName: p.evidence || 'Identified in evidence'
+        } : undefined,
+        pedestrianDetails: isPedestrian ? {
+          reportedActivity: p.evidence || 'Pedestrian in roadway'
+        } : undefined,
+        damageObservations: pDamage
+      });
+    });
+  } else if (latestAnalysis?.possible_scene_reconstruction?.elements && Array.isArray(latestAnalysis.possible_scene_reconstruction.elements) && latestAnalysis.possible_scene_reconstruction.elements.length > 0) {
+    latestAnalysis.possible_scene_reconstruction.elements.forEach((el: any, idx: number) => {
+      const isPedestrian = el.label?.toLowerCase().includes('pedestrian');
+      mappedParticipants.push({
+        id: `p-${idx + 1}`,
+        type: isPedestrian ? 'pedestrian' : 'vehicle',
+        label: el.label || `Participant ${idx + 1}`,
+        role: isPedestrian ? 'pedestrian' : 'driver',
+        vehicleDetails: !isPedestrian ? {
+          vehicleType: el.label || 'Vehicle',
+          makeModel: el.label || 'Unknown Model',
+          driverName: el.position || 'On roadway'
+        } : undefined,
+        pedestrianDetails: isPedestrian ? {
+          reportedActivity: el.position || 'On roadway'
+        } : undefined,
+        damageObservations: [{
+          component: 'Impact Contact Zone',
+          severity: 'Moderate',
+          description: el.description || 'Positioned at impact area',
+          evidenceRefIds: []
+        }]
+      });
+    });
+  }
+
+  // Map scene observations
+  const mappedSceneObservations = latestAnalysis?.scene_observations && Array.isArray(latestAnalysis.scene_observations) && latestAnalysis.scene_observations.length > 0
+    ? latestAnalysis.scene_observations.map((so: any, idx: number) => ({
+        id: `so-${idx + 1}`,
+        observation: so.observation || '',
+        classification: (so.classification as EvidenceClassification) || 'OBSERVED'
+      }))
+    : (latestAnalysis?.observed_evidence || []).map((ev: any, idx: number) => ({
+        id: `so-ev-${idx + 1}`,
+        observation: typeof ev === 'string' ? ev : (ev.text || ''),
+        classification: 'OBSERVED' as EvidenceClassification
+      }));
+
+  if (row.description && !mappedSceneObservations.some((s: any) => s.observation === row.description)) {
+    mappedSceneObservations.push({
+      id: `so-rep-0`,
+      observation: row.description,
+      classification: 'REPORTED' as EvidenceClassification
+    });
+  }
+
+  // Map sequence of events
+  const mappedSequenceOfEvents: EventSequenceStep[] = (latestAnalysis?.possible_sequence_of_events || []).map((step: any, idx: number) => ({
+    stepNumber: idx + 1,
+    timeReference: `T+${(idx * 0.8).toFixed(1)}s`,
+    title: `Phase ${idx + 1}`,
+    description: typeof step === 'string' ? step : (step.description || JSON.stringify(step)),
+    classification: 'INFERRED' as EvidenceClassification,
+    evidenceRefIds: []
+  }));
+
+  // Map participant actions
+  const mappedParticipantActions: ParticipantActionAnalysis[] = (latestAnalysis?.participant_actions || []).map((act: any, idx: number) => ({
+    participantId: `p-${idx + 1}`,
+    participantLabel: act.participantLabel || `Participant ${idx + 1}`,
+    reportedAction: act.action || 'Unknown action',
+    observedAction: act.action || 'Observed in analysis',
+    possibleContributingAction: Array.isArray(act.possibleContributingFactors)
+      ? act.possibleContributingFactors.join('; ')
+      : (act.possibleContributingFactors || 'Action assessed in evidence'),
+    evidenceCitations: [],
+    confidenceLevel: (act.classification === 'OBSERVED' ? 'High' : 'Moderate') as 'High' | 'Moderate',
+    uncertaintyNotes: 'Evidence-based preliminary determination'
+  }));
+
+  // Map evidence limitations
+  const mappedLimitations: string[] = latestAnalysis?.evidence_limitations && Array.isArray(latestAnalysis.evidence_limitations)
+    ? latestAnalysis.evidence_limitations
+    : [];
+
   return {
     id: caseId,
     dbId: row.id,
@@ -99,18 +224,16 @@ export function mapRowToCase(
     weatherConditions: 'Clear daylight, dry road surface',
     roadConditions: 'Standard paved roadway',
     userNarrative: row.description || '',
-    participants: [],
+    participants: mappedParticipants,
     evidenceFiles: mappedEvidence,
     analysisResult: latestAnalysis,
     overviewSummary: latestAnalysis?.summary || (isAnalyzed
       ? `Completed investigation report for ${row.accident_type?.replace(/_/g, ' ') || 'traffic collision'}.`
       : ''),
-    sceneObservations: row.description
-      ? [{ id: `so-${row.id}`, observation: row.description, classification: 'REPORTED' }]
-      : [],
-    sequenceOfEvents: [],
-    participantActions: [],
-    evidenceLimitations: [],
+    sceneObservations: mappedSceneObservations,
+    sequenceOfEvents: mappedSequenceOfEvents,
+    participantActions: mappedParticipantActions,
+    evidenceLimitations: mappedLimitations,
     reconstruction: {
       scenarioTitle: `${row.location || 'Incident'} Kinematic Layout`,
       roadType: row.accident_type === 'vehicle_vs_pedestrian' ? 'two_lane_crosswalk' : 'four_way_intersection',
