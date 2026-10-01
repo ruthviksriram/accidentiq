@@ -1,3 +1,11 @@
+## 🔑 Demo Access
+
+**⚠️ There is no public Sign Up option. This is a restricted-access application. Users must be provided with authorized login credentials to access the system.**
+
+**Demo Email:** `kaushalkunisetty@gmail.com`
+
+**Demo Password:** `accidentiq123#`
+
 # AccidentIQ 🚔🤖
 
 AccidentIQ is a multimodal AI-powered accident investigation and scene reconstruction platform that helps police officers and investigators manage cases, securely organize multimodal scene evidence, and generate structured forensic AI-assisted insights using Google Gemini and Supabase.
