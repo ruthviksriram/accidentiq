@@ -1,13 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string;
-const supabasePublishableKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+const defaultUrl = 'https://odiwqvhjrrtchzsojfjp.supabase.co';
+const defaultKey = 'sb_publishable_BrNGi_9GXVaaNCNTzBL0NQ_tGMPnfIi';
 
-if (!supabaseUrl || !supabasePublishableKey) {
-  console.warn(
-    'Supabase configuration warning: VITE_SUPABASE_URL or VITE_SUPABASE_PUBLISHABLE_KEY is missing. Check your .env.local file.'
-  );
-}
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string) || defaultUrl;
+const supabasePublishableKey =
+  (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string) ||
+  (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ||
+  defaultKey;
 
 export const supabase = createClient(
   supabaseUrl || '',
