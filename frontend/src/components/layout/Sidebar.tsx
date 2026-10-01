@@ -12,6 +12,7 @@ import {
 import { ThemeToggle } from '../common/ThemeToggle';
 import { TelanganaPoliceLogo } from '../common/TelanganaPoliceLogo';
 import { supabase } from '../../lib/supabase';
+import { useCases } from '../../context/CaseContext';
 
 interface SidebarProps {
   isOpenMobile?: boolean;
@@ -23,6 +24,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile
 }) => {
   const location = useLocation();
+  const { cases } = useCases();
   const [isHovered, setIsHovered] = useState(false);
   const [isFocused, setIsFocused] = useState(false);
 
@@ -36,11 +38,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { label: 'Settings', shortLabel: 'Settings', path: '/settings', icon: Settings }
   ];
 
-  const recentCases = [
-    { id: 'ACC-2026-001', label: 'Crosswalk Incident', type: 'Pedestrian' },
-    { id: 'ACC-2026-002', label: 'Highway 101 Collision', type: '2-Vehicle' },
-    { id: 'ACC-2026-003', label: 'Commercial Freight Pier', type: 'Multi-Unit' }
-  ];
+  // Derive recent cases ONLY from real Supabase cases in CaseContext
+  const recentCases = cases.slice(0, 5).map((c) => {
+    let typeLabel = 'Vehicle';
+    if (c.accidentType === 'vehicle_vs_pedestrian') typeLabel = 'Pedestrian';
+    else if (c.accidentType === 'vehicle_vs_vehicle') typeLabel = '2-Vehicle';
+    else if (c.accidentType === 'vehicle_vs_multiple' || c.accidentType === 'complex') typeLabel = 'Multi-Unit';
+    else if (c.accidentType === 'vehicle_vs_object') typeLabel = 'Fixed Object';
+
+    return {
+      id: c.caseNumber || c.id,
+      label: c.title || c.location || 'Incident Dossier',
+      type: typeLabel
+    };
+  });
 
   return (
     <>
@@ -252,39 +263,52 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   Recent Investigations
                 </div>
 
-                {recentCases.map((rc) => {
-                  const isCaseActive = location.pathname.includes(rc.id);
-                  return (
-                    <NavLink
-                      key={rc.id}
-                      to={`/cases/${rc.id}/analysis`}
-                      onClick={onCloseMobile}
-                      title={`${rc.id} — ${rc.label}`}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.6rem',
-                        padding: '0.45rem 0.85rem',
-                        borderRadius: 'var(--radius-sm)',
-                        fontSize: '0.78rem',
-                        color: isCaseActive ? 'var(--text-primary)' : 'var(--text-secondary)',
-                        backgroundColor: isCaseActive ? 'var(--accent-surface)' : 'transparent',
-                        border: `1px solid ${isCaseActive ? 'var(--accent-border)' : 'transparent'}`,
-                        transition: 'all var(--transition-fast)'
-                      }}
-                      className="sidebar-recent-item"
-                    >
-                      <FolderOpen
-                        size={13}
-                        style={{ color: isCaseActive ? 'var(--accent-text)' : 'var(--text-tertiary)', flexShrink: 0 }}
-                      />
-                      <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
-                        <span className="mono" style={{ fontWeight: 600 }}>{rc.id}</span>
-                        <span style={{ color: 'var(--text-tertiary)', marginLeft: '0.35rem' }}>• {rc.type}</span>
-                      </div>
-                    </NavLink>
-                  );
-                })}
+                {recentCases.length > 0 ? (
+                  recentCases.map((rc) => {
+                    const isCaseActive = location.pathname.includes(rc.id);
+                    return (
+                      <NavLink
+                        key={rc.id}
+                        to={`/cases/${rc.id}/analysis`}
+                        onClick={onCloseMobile}
+                        title={`${rc.id} — ${rc.label}`}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.6rem',
+                          padding: '0.45rem 0.85rem',
+                          borderRadius: 'var(--radius-sm)',
+                          fontSize: '0.78rem',
+                          color: isCaseActive ? 'var(--text-primary)' : 'var(--text-secondary)',
+                          backgroundColor: isCaseActive ? 'var(--accent-surface)' : 'transparent',
+                          border: `1px solid ${isCaseActive ? 'var(--accent-border)' : 'transparent'}`,
+                          transition: 'all var(--transition-fast)'
+                        }}
+                        className="sidebar-recent-item"
+                      >
+                        <FolderOpen
+                          size={13}
+                          style={{ color: isCaseActive ? 'var(--accent-text)' : 'var(--text-tertiary)', flexShrink: 0 }}
+                        />
+                        <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                          <span className="mono" style={{ fontWeight: 600 }}>{rc.id}</span>
+                          <span style={{ color: 'var(--text-tertiary)', marginLeft: '0.35rem' }}>• {rc.type}</span>
+                        </div>
+                      </NavLink>
+                    );
+                  })
+                ) : (
+                  <div
+                    style={{
+                      padding: '0.45rem 0.85rem',
+                      fontSize: '0.76rem',
+                      color: 'var(--text-tertiary)',
+                      fontStyle: 'italic'
+                    }}
+                  >
+                    No recent investigations
+                  </div>
+                )}
               </div>
             )}
           </nav>

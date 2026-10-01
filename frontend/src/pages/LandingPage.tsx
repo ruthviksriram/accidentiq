@@ -320,7 +320,7 @@ export const LandingPage: React.FC = () => {
                     <span style={{ fontSize: '0.7rem', color: 'var(--text-tertiary)' }}>
                       6 Police Evidence Files Cataloged
                     </span>
-                    <Link to="/cases/ACC-2026-001/reconstruction" className="btn btn-primary btn-sm" style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem' }}>
+                    <Link to="/dashboard" className="btn btn-primary btn-sm" style={{ fontSize: '0.72rem', padding: '0.25rem 0.6rem' }}>
                       Explore Reconstruction →
                     </Link>
                   </div>

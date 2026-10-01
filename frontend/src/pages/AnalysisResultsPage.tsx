@@ -33,7 +33,7 @@ export const AnalysisResultsPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { getCaseById, cases, refreshCases } = useCases();
 
-  const caseData = getCaseById(id || 'ACC-2026-001') || cases[0];
+  const caseData = id ? getCaseById(id) : cases[0];
   const [selectedEvidenceModal, setSelectedEvidenceModal] = useState<EvidenceFile | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);

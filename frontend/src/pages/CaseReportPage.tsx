@@ -25,7 +25,7 @@ export const CaseReportPage: React.FC = () => {
   const navigate = useNavigate();
   const { getCaseById, cases, refreshCases } = useCases();
 
-  const caseData = getCaseById(id || 'ACC-2026-001') || cases[0];
+  const caseData = id ? getCaseById(id) : cases[0];
   const [downloadSuccess, setDownloadSuccess] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);

@@ -23,7 +23,7 @@ import { AccidentCase } from '../types';
 export const DashboardPage: React.FC = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { cases, refreshCases, resetToDefault, clearAllForEmptyState } = useCases();
+  const { cases, refreshCases, resetToDefault } = useCases();
   const [activeFilter, setActiveFilter] = useState<string>('all');
 
   // Delete modal & feedback states
@@ -136,22 +136,13 @@ export const DashboardPage: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
             <button
               type="button"
-              onClick={resetToDefault}
+              onClick={refreshCases}
               className="btn btn-ghost btn-sm"
               style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', padding: '0.15rem 0.35rem' }}
-              title="Reset mock cases"
+              title="Refresh investigation cases"
             >
               <RotateCcw size={11} style={{ marginRight: '0.25rem' }} />
-              Reset Demo
-            </button>
-            <span style={{ color: 'var(--border-subtle)', fontSize: '0.7rem' }}>•</span>
-            <button
-              type="button"
-              onClick={activeCases === 0 ? resetToDefault : clearAllForEmptyState}
-              className="btn btn-ghost btn-sm"
-              style={{ fontSize: '0.72rem', color: 'var(--text-tertiary)', padding: '0.15rem 0.35rem' }}
-            >
-              {activeCases === 0 ? 'Restore Cases' : 'Empty State'}
+              Refresh
             </button>
           </div>
         </div>

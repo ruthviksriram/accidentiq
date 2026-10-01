@@ -21,7 +21,7 @@ export const SceneReconstructionPage: React.FC = () => {
   const navigate = useNavigate();
   const { getCaseById, cases } = useCases();
 
-  const caseData = getCaseById(id || 'ACC-2026-001') || cases[0];
+  const caseData = id ? getCaseById(id) : cases[0];
 
   // Timeline Step State: 0 (Approach), 1 (Pre-impact), 2 (Impact), 3 (Rest)
   const [currentStep, setCurrentStep] = useState<number>(2);
