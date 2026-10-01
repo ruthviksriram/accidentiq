@@ -23,11 +23,17 @@ interface GeminiObservedEvidence {
   confidence: "high" | "medium" | "low";
 }
 
-interface GeminiParticipant {
+interface GeminiReconstructionElement {
   label: string;
-  type: string;
+  description: string;
   position: string;
-  movement: string;
+}
+
+interface GeminiSceneReconstruction {
+  available: boolean;
+  description: string;
+  elements: GeminiReconstructionElement[];
+  limitations: string;
 }
 
 interface GeminiAnalysisOutput {
@@ -37,12 +43,7 @@ interface GeminiAnalysisOutput {
   possible_sequence_of_events: string[];
   possible_contributing_factors: string[];
   evidence_limitations: string[];
-  possible_scene_reconstruction: {
-    title: string;
-    disclaimer: string;
-    description: string;
-    participants: GeminiParticipant[];
-  };
+  possible_scene_reconstruction: GeminiSceneReconstruction;
 }
 
 // Convert Uint8Array to base64 string
@@ -383,7 +384,35 @@ CRITICAL AI SAFETY & WORDING RULES:
    "Possible Scene Reconstruction"
 6. Include this exact disclaimer in the reconstruction:
    "Evidence-based visualization — not a definitive forensic or legal reconstruction."
-7. The reconstruction is only a textual and structured interpretation for the MVP. Do NOT produce speculative claims.
+7. The reconstruction must be evidence-grounded and should NOT claim definitive positions, speeds, trajectories, or legal fault when the evidence cannot establish them.
+8. Do NOT invent measurements, exact vehicle speeds, exact trajectories, or positions that cannot be established from the evidence.
+9. For "possible_scene_reconstruction":
+   - If the photographic evidence is sufficient to infer the physical arrangement of vehicles, impact zones, or scene objects:
+     "available": true,
+     "description": "Evidence-grounded description of the physical configuration and kinematic arrangement observed from photos.",
+     "elements": [
+       {
+         "label": "Vehicle A",
+         "description": "Sedan with front-end deformation",
+         "position": "Northbound lane, angled towards center"
+       },
+       {
+         "label": "Vehicle B",
+         "description": "SUV with passenger-side impact damage",
+         "position": "Intersection center-right, facing west"
+       },
+       {
+         "label": "Area of Impact",
+         "description": "Probable collision contact zone indicated by fluid/debris concentration",
+         "position": "Intersection quadrant"
+       }
+     ],
+     "limitations": "Forensic boundaries detailing what cannot be definitively established (e.g. exact speeds, pre-braking paths)."
+   - If the evidence is insufficient to determine spatial positions:
+     "available": false,
+     "description": "Detailed explanation of why the evidence is insufficient to model physical scene arrangement (e.g. only isolated close-up damage photos without roadway landmarks).",
+     "elements": [],
+     "limitations": "Description of missing evidentiary elements required for reconstruction."
 
 REQUIRED JSON OUTPUT FORMAT:
 You MUST respond with a single, valid JSON object with this exact shape:
@@ -408,17 +437,16 @@ You MUST respond with a single, valid JSON object with this exact shape:
     "factors that cannot be determined from available evidence (e.g. speed, exact pre-braking trajectory, blind angles)"
   ],
   "possible_scene_reconstruction": {
-    "title": "Possible Scene Reconstruction",
-    "disclaimer": "Evidence-based visualization — not a definitive forensic or legal reconstruction.",
-    "description": "textual summary of the possible kinematic arrangement and impact configuration",
-    "participants": [
+    "available": true,
+    "description": "evidence-grounded overview of the spatial arrangement and impact configuration",
+    "elements": [
       {
         "label": "Vehicle A",
-        "type": "vehicle",
-        "position": "description of position on roadway",
-        "movement": "description of directional vector"
+        "description": "sedan with front-end deformation",
+        "position": "resting in northbound lane"
       }
-    ]
+    ],
+    "limitations": "exact speeds, pre-braking trajectories, and exact contact millisecond cannot be established from photographs alone"
   }
 }`;
 
@@ -453,11 +481,38 @@ Generate the structured analysis JSON adhering strictly to the safety guidelines
       imagePayloads
     );
 
-    // Ensure mandatory disclaimer and title are present in reconstruction
-    if (analysisOutput.possible_scene_reconstruction) {
-      analysisOutput.possible_scene_reconstruction.title = "Possible Scene Reconstruction";
-      analysisOutput.possible_scene_reconstruction.disclaimer =
-        "Evidence-based visualization — not a definitive forensic or legal reconstruction.";
+    // Ensure possible_scene_reconstruction conforms to required structure
+    if (!analysisOutput.possible_scene_reconstruction) {
+      analysisOutput.possible_scene_reconstruction = {
+        available: false,
+        description: "Insufficient photographic evidence to determine physical scene reconstruction.",
+        elements: [],
+        limitations: "Evidence-based visualization — not a definitive forensic or legal reconstruction. Exact trajectories, speeds, and positions cannot be established without additional forensic telemetry or scene measurements."
+      };
+    } else {
+      const recon = analysisOutput.possible_scene_reconstruction as any;
+      if (typeof recon.available !== "boolean") {
+        recon.available = Array.isArray(recon.elements) && recon.elements.length > 0;
+      }
+      if (!Array.isArray(recon.elements)) {
+        if (Array.isArray(recon.participants)) {
+          recon.elements = recon.participants.map((p: any) => ({
+            label: p.label || "Vehicle",
+            description: p.type || p.movement || "Collision participant",
+            position: p.position || "Position not established"
+          }));
+        } else {
+          recon.elements = [];
+        }
+      }
+      if (!recon.description) {
+        recon.description = recon.available
+          ? "Spatial layout reconstructed from available photographic evidence."
+          : "Insufficient evidence to establish spatial scene configuration.";
+      }
+      if (!recon.limitations) {
+        recon.limitations = "Evidence-based visualization — not a definitive forensic or legal reconstruction. Speeds, trajectories, and positions cannot be definitively established from the supplied evidence.";
+      }
     }
 
     // If case has non-image files, make sure evidence limitations notes it

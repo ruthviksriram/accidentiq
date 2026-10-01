@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   ShieldAlert,
   Eye,
@@ -12,14 +12,48 @@ import {
   Sparkles,
   Info
 } from 'lucide-react';
-import { GeminiAnalysisOutput } from '../../types';
+import { GeminiAnalysisOutput, GeminiSceneReconstruction } from '../../types';
 import { EvidenceBadge } from '../common/EvidenceBadge';
+import { SceneVisual2DDiagram } from './SceneVisual2DDiagram';
 
 interface GeminiAnalysisDisplayProps {
   analysis: GeminiAnalysisOutput;
 }
 
 export const GeminiAnalysisDisplay: React.FC<GeminiAnalysisDisplayProps> = ({ analysis }) => {
+  const reconstruction = useMemo<GeminiSceneReconstruction>(() => {
+    const raw = analysis.possible_scene_reconstruction;
+    if (!raw) {
+      return {
+        available: false,
+        description: 'No physical reconstruction could be generated from the available photographic record.',
+        elements: [],
+        limitations: 'Evidence-based visualization — not a definitive forensic or legal reconstruction. Photographic evidence was insufficient to establish spatial coordinates or scene layout.'
+      };
+    }
+
+    // Convert legacy participants if elements not present
+    let elements = raw.elements || [];
+    if (!elements.length && raw.participants && raw.participants.length > 0) {
+      elements = raw.participants.map((p) => ({
+        label: p.label,
+        description: p.type || p.movement || 'Participant in collision',
+        position: p.position || 'Position not established'
+      }));
+    }
+
+    const available = typeof raw.available === 'boolean'
+      ? raw.available
+      : elements.length > 0;
+
+    return {
+      available,
+      description: raw.description || (available ? 'Evidence-based reconstruction generated from photographic findings.' : 'Photographic evidence is insufficient to model physical scene arrangement.'),
+      elements,
+      limitations: raw.limitations || 'Evidence-based visualization — not a definitive forensic or legal reconstruction. Exact vehicle trajectories, speeds, and positions cannot be definitively established from the supplied photographic evidence.'
+    };
+  }, [analysis.possible_scene_reconstruction]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', width: '100%' }}>
       {/* Top Mandatory Disclaimer Banner */}
@@ -368,30 +402,66 @@ export const GeminiAnalysisDisplay: React.FC<GeminiAnalysisDisplayProps> = ({ an
         </div>
       </div>
 
-      {/* 7. Possible Scene Reconstruction */}
+      {/* Possible Scene Reconstruction */}
       <div
         className="card"
         style={{
-          padding: '1.35rem',
+          padding: '1.5rem',
           backgroundColor: 'var(--bg-surface)',
           border: '1px solid var(--border-subtle)',
           borderRadius: 'var(--radius-md)',
           display: 'flex',
           flexDirection: 'column',
-          gap: '1rem'
+          gap: '1.25rem'
         }}
       >
-        <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-            <Layers size={17} style={{ color: 'var(--accent-primary)' }} />
-            <h3 style={{ fontSize: '1rem', fontWeight: 700, margin: 0 }}>
-              7. Possible Scene Reconstruction
-            </h3>
+        {/* Section Header */}
+        <div style={{ borderBottom: '1px solid var(--border-subtle)', paddingBottom: '0.85rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.35rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Layers size={18} style={{ color: 'var(--accent-primary)' }} />
+              <h3 style={{ fontSize: '1.1rem', fontWeight: 800, margin: 0, color: 'var(--text-primary)' }}>
+                Possible Scene Reconstruction
+              </h3>
+            </div>
+            {reconstruction.available ? (
+              <span
+                className="mono"
+                style={{
+                  fontSize: '0.68rem',
+                  fontWeight: 700,
+                  color: '#10b981',
+                  backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                  border: '1px solid rgba(16, 185, 129, 0.25)',
+                  padding: '0.15rem 0.5rem',
+                  borderRadius: 'var(--radius-xs)',
+                  textTransform: 'uppercase'
+                }}
+              >
+                2D Visual Reconstruction Active
+              </span>
+            ) : (
+              <span
+                className="mono"
+                style={{
+                  fontSize: '0.68rem',
+                  fontWeight: 700,
+                  color: 'var(--tag-unknown-text)',
+                  backgroundColor: 'var(--tag-unknown-bg)',
+                  border: '1px solid var(--tag-unknown-border)',
+                  padding: '0.15rem 0.5rem',
+                  borderRadius: 'var(--radius-xs)',
+                  textTransform: 'uppercase'
+                }}
+              >
+                2D Diagram Unavailable
+              </span>
+            )}
           </div>
           <p
             className="mono"
             style={{
-              fontSize: '0.72rem',
+              fontSize: '0.76rem',
               color: 'var(--accent-text)',
               margin: 0,
               fontWeight: 600
@@ -402,80 +472,85 @@ export const GeminiAnalysisDisplay: React.FC<GeminiAnalysisDisplayProps> = ({ an
         </div>
 
         {/* Narrative Description */}
-        <div>
-          <h4 style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.35rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            Reconstruction Overview
-          </h4>
-          <p style={{ fontSize: '0.86rem', color: 'var(--text-primary)', lineHeight: 1.6, margin: 0 }}>
-            {analysis.possible_scene_reconstruction?.description}
+        <div
+          style={{
+            padding: '0.9rem 1.1rem',
+            backgroundColor: 'var(--bg-canvas-subtle)',
+            borderRadius: 'var(--radius-sm)',
+            border: '1px solid var(--border-subtle)'
+          }}
+        >
+          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-tertiary)', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.35rem' }}>
+            Reconstruction Findings & Kinematics
+          </div>
+          <p style={{ fontSize: '0.88rem', color: 'var(--text-primary)', lineHeight: 1.6, margin: 0 }}>
+            {reconstruction.description}
           </p>
         </div>
 
-        {/* Structured Participants Grid */}
-        {analysis.possible_scene_reconstruction?.participants &&
-          analysis.possible_scene_reconstruction.participants.length > 0 && (
-            <div>
-              <h4 style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '0.5rem', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                Reconstructed Actor Layout
-              </h4>
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-                  gap: '0.75rem'
-                }}
-              >
-                {analysis.possible_scene_reconstruction.participants.map((p, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      padding: '0.85rem',
-                      backgroundColor: 'var(--bg-canvas-subtle)',
-                      borderRadius: 'var(--radius-sm)',
-                      border: '1px solid var(--border-subtle)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: '0.45rem'
-                    }}
-                  >
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                        <Car size={15} style={{ color: 'var(--accent-primary)' }} />
-                        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                          {p.label}
-                        </span>
-                      </div>
-                      <span
-                        className="mono"
-                        style={{
-                          fontSize: '0.66rem',
-                          padding: '0.1rem 0.35rem',
-                          borderRadius: 'var(--radius-xs)',
-                          backgroundColor: 'var(--bg-surface)',
-                          border: '1px solid var(--border-subtle)',
-                          color: 'var(--text-tertiary)',
-                          textTransform: 'uppercase'
-                        }}
-                      >
-                        {p.type}
-                      </span>
-                    </div>
-
-                    <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', display: 'flex', flexDirection: 'column', gap: '0.2rem' }}>
-                      <div>
-                        <strong style={{ color: 'var(--text-primary)' }}>Position: </strong>
-                        {p.position}
-                      </div>
-                      <div>
-                        <strong style={{ color: 'var(--text-primary)' }}>Movement: </strong>
-                        {p.movement}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
+        {/* 2D Visual Scene Diagram (when available) OR Insufficient Evidence Notice */}
+        {reconstruction.available ? (
+          <SceneVisual2DDiagram reconstruction={reconstruction} />
+        ) : (
+          <div
+            style={{
+              padding: '1.75rem',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'rgba(239, 68, 68, 0.04)',
+              border: '1px dashed rgba(239, 68, 68, 0.25)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              textAlign: 'center',
+              gap: '0.75rem'
+            }}
+          >
+            <div
+              style={{
+                width: '42px',
+                height: '42px',
+                borderRadius: '50%',
+                backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: '#ef4444'
+              }}
+            >
+              <AlertTriangle size={20} />
             </div>
-          )}
+            <h4 style={{ fontSize: '0.96rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+              2D Scene Diagram Unavailable
+            </h4>
+            <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', maxWidth: '560px', lineHeight: 1.55, margin: 0 }}>
+              The submitted photographic evidence does not provide sufficient spatial landmarks, wide roadway perspective, or geometric reference points to model an evidence-grounded 2D diagram without speculative extrapolation.
+            </p>
+            <div style={{ fontSize: '0.76rem', color: 'var(--text-tertiary)' }}>
+              Upload wide-angle scene photographs or roadway perspective shots to enable physical 2D diagramming.
+            </div>
+          </div>
+        )}
+
+        {/* Limitations Section */}
+        {reconstruction.limitations && (
+          <div
+            style={{
+              padding: '0.9rem 1.1rem',
+              borderRadius: 'var(--radius-sm)',
+              backgroundColor: 'var(--tag-unknown-bg)',
+              border: '1px solid var(--tag-unknown-border)',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '0.75rem'
+            }}
+          >
+            <HelpCircle size={16} style={{ color: 'var(--tag-unknown-text)', flexShrink: 0, marginTop: '2px' }} />
+            <div style={{ fontSize: '0.8rem', lineHeight: 1.5, color: 'var(--text-secondary)' }}>
+              <strong style={{ color: 'var(--tag-unknown-text)' }}>Evidentiary Limitations: </strong>
+              {reconstruction.limitations}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

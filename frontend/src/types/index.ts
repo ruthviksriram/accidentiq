@@ -177,6 +177,12 @@ export interface GeminiObservedEvidence {
   confidence: 'high' | 'medium' | 'low';
 }
 
+export interface GeminiSceneReconstructionElement {
+  label: string;
+  description: string;
+  position: string;
+}
+
 export interface GeminiReconstructionParticipant {
   label: string;
   type: string;
@@ -185,10 +191,13 @@ export interface GeminiReconstructionParticipant {
 }
 
 export interface GeminiSceneReconstruction {
+  available: boolean;
+  description: string;
+  elements: GeminiSceneReconstructionElement[];
+  limitations: string;
   title?: string;
   disclaimer?: string;
-  description: string;
-  participants: GeminiReconstructionParticipant[];
+  participants?: GeminiReconstructionParticipant[];
 }
 
 export interface GeminiAnalysisOutput {
