@@ -55,7 +55,7 @@ function uint8ArrayToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-// Call Google Gemini REST API with fallback model options
+// Call Google Gemini REST API with fallback model options and exponential backoff on HTTP 503
 async function callGeminiVision(
   apiKey: string,
   systemInstruction: string,
@@ -67,90 +67,124 @@ async function callGeminiVision(
     cleanKey = cleanKey.substring(cleanKey.indexOf("=") + 1).trim().replace(/^["']|["']$/g, "").trim();
   }
 
-  // Candidate models: gemini-3.5-flash as primary, gemini-flash-latest as fallback
-  const models = ["gemini-3.5-flash", "gemini-flash-latest"];
+  // Model priority:
+  // 1. gemini-3.8-flash
+  // 2. gemini-3.7-flash
+  // 3. gemini-3.6-flash
+  // 4. gemini-3.5-flash
+  const models = [
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash",
+  ];
   
+  const maxRetriesPerModel = 2; // Up to 2 retries (3 total attempts) on HTTP 503
   let lastError: Error | null = null;
 
   for (const model of models) {
-    try {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cleanKey)}`;
+    for (let attempt = 0; attempt <= maxRetriesPerModel; attempt++) {
+      if (attempt > 0) {
+        // Exponential backoff: 1000ms, 2000ms
+        const backoffMs = 1000 * Math.pow(2, attempt - 1);
+        console.warn(`Model ${model} received 503. Retrying attempt ${attempt}/${maxRetriesPerModel} after ${backoffMs}ms backoff...`);
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      }
 
-      const contentsParts: Array<Record<string, unknown>> = [];
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(cleanKey)}`;
 
-      // Attach image parts
-      for (const img of images) {
+        const contentsParts: Array<Record<string, unknown>> = [];
+
+        // Attach image parts
+        for (const img of images) {
+          contentsParts.push({
+            inline_data: {
+              mime_type: img.mimeType,
+              data: img.base64Data,
+            },
+          });
+        }
+
+        // Attach text prompt part
         contentsParts.push({
-          inline_data: {
-            mime_type: img.mimeType,
-            data: img.base64Data,
-          },
+          text: userPrompt,
         });
-      }
 
-      // Attach text prompt part
-      contentsParts.push({
-        text: userPrompt,
-      });
-
-      const payload = {
-        system_instruction: {
-          parts: [{ text: systemInstruction }],
-        },
-        contents: [
-          {
-            role: "user",
-            parts: contentsParts,
+        const payload = {
+          system_instruction: {
+            parts: [{ text: systemInstruction }],
           },
-        ],
-        generationConfig: {
-          response_mime_type: "application/json",
-          temperature: 0.2,
-          topP: 0.9,
-        },
-      };
+          contents: [
+            {
+              role: "user",
+              parts: contentsParts,
+            },
+          ],
+          generationConfig: {
+            response_mime_type: "application/json",
+            temperature: 0.2,
+            topP: 0.9,
+          },
+        };
 
-      const response = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-goog-api-key": cleanKey,
-        },
-        body: JSON.stringify(payload),
-      });
+        const response = await fetch(endpoint, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": cleanKey,
+          },
+          body: JSON.stringify(payload),
+        });
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.warn(`Model ${model} returned error status ${response.status}:`, errorText);
-        lastError = new Error(`Gemini ${model} call failed (${response.status}): ${errorText.slice(0, 300)}`);
-        continue;
+        if (response.status === 503) {
+          const errorText = await response.text();
+          console.warn(`Model ${model} returned 503 Service Unavailable (attempt ${attempt + 1}/${maxRetriesPerModel + 1}):`, errorText);
+          lastError = new Error(`Gemini ${model} is temporarily unavailable (503): ${errorText.slice(0, 300)}`);
+          if (attempt < maxRetriesPerModel) {
+            continue; // Retry this model with exponential backoff
+          }
+          break; // Exhausted 503 retries for this model, fall back to next model
+        }
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.warn(`Model ${model} returned error status ${response.status}:`, errorText);
+          lastError = new Error(`Gemini ${model} call failed (${response.status}): ${errorText.slice(0, 300)}`);
+          break; // Move to next fallback model immediately on non-503 status
+        }
+
+        const responseJson = await response.json();
+        const candidateText = responseJson.candidates?.[0]?.content?.parts?.[0]?.text;
+
+        if (!candidateText) {
+          lastError = new Error(`Gemini ${model} returned empty response content.`);
+          break;
+        }
+
+        // Clean up markdown fences if model included them
+        let cleanedJsonText = candidateText.trim();
+        if (cleanedJsonText.startsWith("```json")) {
+          cleanedJsonText = cleanedJsonText.slice(7);
+        } else if (cleanedJsonText.startsWith("```")) {
+          cleanedJsonText = cleanedJsonText.slice(3);
+        }
+        if (cleanedJsonText.endsWith("```")) {
+          cleanedJsonText = cleanedJsonText.slice(0, -3);
+        }
+        cleanedJsonText = cleanedJsonText.trim();
+
+        const parsed: GeminiAnalysisOutput = JSON.parse(cleanedJsonText);
+        console.log(`Successfully generated analysis using model: ${model}`);
+        return parsed;
+      } catch (err: unknown) {
+        console.warn(`Attempt with ${model} (attempt ${attempt + 1}) encountered error:`, err);
+        lastError = err instanceof Error ? err : new Error(String(err));
+        if (attempt < maxRetriesPerModel) {
+          continue;
+        }
+        break;
       }
-
-      const responseJson = await response.json();
-      const candidateText = responseJson.candidates?.[0]?.content?.parts?.[0]?.text;
-
-      if (!candidateText) {
-        lastError = new Error(`Gemini ${model} returned empty response content.`);
-        continue;
-      }
-
-      // Clean up markdown fences if model included them
-      let cleanedJsonText = candidateText.trim();
-      if (cleanedJsonText.startsWith("```json")) {
-        cleanedJsonText = cleanedJsonText.slice(7);
-      } else if (cleanedJsonText.startsWith("```")) {
-        cleanedJsonText = cleanedJsonText.slice(3);
-      }
-      if (cleanedJsonText.endsWith("```")) {
-        cleanedJsonText = cleanedJsonText.slice(0, -3);
-      }
-      cleanedJsonText = cleanedJsonText.trim();
-
-      const parsed: GeminiAnalysisOutput = JSON.parse(cleanedJsonText);
-      return parsed;
-    } catch (err: unknown) {
-      console.warn(`Attempt with ${model} failed:`, err);
-      lastError = err instanceof Error ? err : new Error(String(err));
     }
   }
 
